@@ -7,8 +7,8 @@ weight: 3
 
 # **About Me**
 
-Hi I am **{{ site.author.name }}** :wave:,<br>
-Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+I am **{{ site.author.name }}**, and welcome to this portfolio.<br><br>
+I'm passionate when it comes to creating and building cool things.<br>My skills range from software to hardware, back end to front end, design and logic. Full stack, full tilt, full generalist.<br>Always looking for the next skill to learn and project to build. Every project is a chance to push myself, experiment, and bring something new into the world. Never stop learning.
 
 <div class="row">
 {% include about/skills.html title="Programming Skills" source=site.data.programming-skills %}

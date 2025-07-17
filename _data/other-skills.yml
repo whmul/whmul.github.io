@@ -1,7 +1,19 @@
-- name: Adobe Photoshop
-  percentage: 95
-  color: info
+- name: Embedded Development (AVR, Atmel, PIC)
+  percentage: 70
+  color: success
 
-- name: Adobe Illustrator
+- name: PCB Design & Manufacture
+  percentage: 75
+  color: success
+
+- name: Component-level electronics repair
   percentage: 90
+  color: success
+
+- name: THT Soldering
+  percentage: 90
+  color: success
+
+- name: SMD Soldering
+  percentage: 70
   color: success
