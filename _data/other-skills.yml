@@ -2,8 +2,8 @@
   percentage: 70
   color: success
 
-- name: PCB Design & Manufacture
-  percentage: 75
+- name: Electrical Engineering, PCB Design & Manufacture
+  percentage: 78
   color: success
 
 - name: Component-level electronics repair

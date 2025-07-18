@@ -1,6 +1,6 @@
 ---
 name: Geiger Counter
-tools: [PCB Design, ATMega368p]
+tools: [PCB Design, ATMega368p, SMD Soldering]
 image: https://i.postimg.cc/4dkhBM1n/geigerdefault.jpg
 description: A fully functional, portable Geiger-Mueller Counter based on the SBM20 GM Tube and an ATMega368p, with an OLED display.
 ---

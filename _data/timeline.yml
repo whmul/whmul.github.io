@@ -1,7 +1,20 @@
+- title: Started my journey in STEM
+  from: 2013
+  to: present
+  description: Initially I learned python in highschool. Made simple apps that downloaded songs from soundcloud and bandcamp. Learned networking with packet tracer.
+
+- title: State Finals, CyberPatriot National Youth Cyber Defense Competition
+  from: 2014
+  to: 2015
+
+- title: Graduated Parkville Sr. High.
+  to: 2015
+
+
 - title: Student, CCBC Essex
   from: 2017
   to: 2021
-  description: Major in Computer Science - GPA 3.5 - A.S.
+  description: Major in Computer Science - GPA 3.4 - A.S.
 
 - title: Freelance
   from: 2022

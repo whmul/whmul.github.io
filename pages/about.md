@@ -16,5 +16,9 @@ I'm passionate when it comes to creating and building cool things.<br>My skills 
 </div>
 
 <div class="row">
+{% include about/skills.html title="Other Relevant Experience" source=site.data.experience %}
+</div>
+
+<div class="row">
 {% include about/timeline.html %}
 </div>

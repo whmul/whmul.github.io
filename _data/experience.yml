@@ -1,0 +1,13 @@
+- name: Mathematics - Optimization, Dynamical systems, Finite Automata, Category theory
+  percentage: 85
+  color: information
+
+- name: AI - Pytorch, Tensorflow, AIfES, TorchSharp
+  percentage: 68
+  color: information
+
+- name: 3D - 3D Printing, Cura, FreeCAD, Tinkercad, Blender
+  percentage: 75
+  color: information
+
+- name: 

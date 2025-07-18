@@ -21,3 +21,7 @@
 - name: C#
   percentage: 51
   color: danger
+
+- name: Julia
+  percentage: 45
+  color: danger
