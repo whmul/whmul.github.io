@@ -13,6 +13,7 @@ This chip is ancient, yet still around and produced to this day, for good reason
 
 The board allows for either through-hole or surface mount (1206) resistors in the same place, and an optional diode if you want <50% duty cycle. There are two holes for power, and two for output and ground.
 
+![Bare PCB](https://i.postimg.cc/NMhXfXvn/IMG-20220808-152310.jpg)
 ![PCB layout](https://i.postimg.cc/63Wxr94c/555pcb.png)
 ![Schematic - classic astable configuration](https://i.postimg.cc/2y3pt2wB/555schem.png)
 
