@@ -18,7 +18,8 @@ I’ve always been fascinated by Geiger counters, partially thanks to the Fallou
 4. [Final Electronics Integration](#final-electronics-integration)
 5. [PCB and Schematic](#pcb-and-schematic)
 6. [Testing & Results](#testing--results)
-7. [Conclusion](#conclusion)
+7. [Code](#code)
+8. [Conclusion](#conclusion)
 
 ---
 
@@ -101,6 +102,136 @@ To test the device safely, I used a radium watch hand and thorium dioxide. Both 
 ![Radium watch hand & thorium dioxide check sources](https://i.postimg.cc/R0KphksT/IMG-20250717-143506.jpg)
 
 ---
+
+## Code
+
+```c
+/*
+ *  Geiger Counter + OLED Display
+ *  Counts pulses on INT-pin 2
+ *  Calculates CPM and converts to µSv/h
+ *  Shows result on 128×32 SSD1306 display
+ *  Hardware: Arduino (AVR), SSD1306 I2C OLED, Geiger tube
+*/
+#if defined(ESP8266) || defined(ESP32)
+    #define ISR_PREFIX IRAM_ATTR
+#else
+    #define ISR_PREFIX
+#endif
+
+#include <Arduino.h>
+#include <U8g2lib.h>
+
+/* User configuration */
+constexpr uint8_t  GEIGER_PIN         = 2;          // must be interrupt pin
+constexpr uint32_t UI_REFRESH_MS      = 1000;       // screen update period
+constexpr size_t   SAMPLE_COUNT       = 10;         // moving-average window
+constexpr float    USV_PER_CPM        = 0.00569476; // tube conversion factor
+
+/* OLED driver instance */
+static U8G2_SSD1306_128X32_UNIVISION_F_HW_I2C display(U8G2_R0);
+
+const uint8_t PROGMEM radiationIcon32x32[] = {
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x03,0xC0,0x00,0x80,0x03,0xC0,0x01,0xC0,0x07,0xE0,
+    0x03,0xE0,0x0F,0xF0,0x07,0xF0,0x0F,0xF0,0x0F,0xF0,0x1F,0xF8,0x0F,0xF0,
+    0x1F,0xF8,0x0F,0xF8,0x3F,0xFC,0x1F,0xF8,0x1F,0xF8,0x1F,0xF8,0xCF,0xF3,
+    0x1F,0xF8,0xCF,0xF3,0x1F,0x00,0xC0,0x03,0x00,0x00,0xC0,0x03,0x00,0x00,
+    0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xC0,0x03,0x00,0x00,
+    0xE0,0x07,0x00,0x00,0xF0,0x0F,0x00,0x00,0xF0,0x0F,0x00,0x00,0xF8,0x1F,
+    0x00,0x00,0xF8,0x1F,0x00,0x00,0xFC,0x3F,0x00,0x00,0xFC,0x3F,0x00,0x00,
+    0xF0,0x0F,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00
+};
+
+/* Ring buffer for the latest pulse timestamps */
+
+struct PulseBuffer {
+    volatile uint32_t stamp[SAMPLE_COUNT]{};  // millis() of each pulse
+    volatile uint8_t  head = 0;               // index of newest entry
+} pulses;
+
+/* Interrupt service routine */
+void ISR_PREFIX onGeigerPulse()
+{
+    pulses.head = (pulses.head + 1) % SAMPLE_COUNT;
+    pulses.stamp[pulses.head] = millis();
+}
+
+/* Average time between successive pulses (ms). Returns NAN if not enough data. */
+float averagePulseIntervalMs()
+{
+    noInterrupts();                        // atomic copy of shared data
+    uint32_t buf[SAMPLE_COUNT];
+    uint8_t  newest = pulses.head;
+    memcpy(buf, (const void*)pulses.stamp, sizeof(buf));
+    interrupts();
+
+    if (buf[newest] == 0) return NAN;      // not initialised yet
+
+    uint32_t sum = 0;
+    size_t   n   = 0;
+
+    for (size_t i = 0; i < SAMPLE_COUNT - 1; ++i) {
+        uint8_t curr = (newest + SAMPLE_COUNT - i) % SAMPLE_COUNT;
+        uint8_t prev = (curr   + SAMPLE_COUNT - 1) % SAMPLE_COUNT;
+        if (buf[prev] == 0) break; // reached empty slot
+        sum += (buf[curr] - buf[prev]);
+        ++n;
+    }
+    return n ? (float)sum / n : NAN;
+}
+
+
+
+void setup()
+{
+    display.begin();
+    pinMode(GEIGER_PIN, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(GEIGER_PIN), onGeigerPulse, FALLING);
+
+    /* Splash screen */
+    display.clearBuffer();
+    display.setFont(u8g2_font_9x15_tf);
+    display.drawStr(0, 16, "Geiger Counter");
+    display.sendBuffer();
+}
+
+void loop()
+{
+    static uint32_t lastUI = 0;
+    if (millis() - lastUI < UI_REFRESH_MS) return; // wait for next tick
+    lastUI = millis();
+
+    /* 1. Calculate CPM and dose rate */
+    float   interval = averagePulseIntervalMs(); // ms
+    uint16_t cpm     = (isnan(interval) || interval == 0)
+                     ? 0
+                     : uint16_t(60000.0f / interval + 0.5f); // round
+    float   usvh     = cpm * USV_PER_CPM;
+
+    /* 2. Draw UI */
+    display.clearBuffer();
+
+    /* Icon */
+    display.drawXBMP(0, 0, 32, 32, radiationIcon32x32);
+
+    /* µSv/h */
+    char svLine[16];
+    char svVal[8];
+    dtostrf(usvh, 4, 1, svVal); // “_._”
+    snprintf(svLine, sizeof(svLine), "%cSv/h:%s", 0xB5, svVal);
+    display.setFont(u8g2_font_9x15_tf);
+    display.drawStr(32, 16, svLine);
+
+    /* CPM */
+    char cpmLine[16];
+    snprintf(cpmLine, sizeof(cpmLine), "CPM:%u", cpm);
+    display.setFont(u8g2_font_8x13_tf);
+    display.drawStr(36, 31, cpmLine);
+
+    display.sendBuffer();
+}
+```
 
 ## Conclusion
 

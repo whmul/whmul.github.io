@@ -32,6 +32,25 @@ I had some experience making designing a circuit board and using the attiny at t
 
 The way it works is, the lights cycle their color clockwise, i.e. R-G-B-R-G-B -> G-B-R-G-B-R -> B-R-G-B-R-G. Thus, we have 3 rows of 3 A2SHB mosfets driving each channel, for each position. By choosing where the cathode of each LED connects to these mosfets, it's sufficient to use 3 output pins to drive this whole array.
 
+Here is the code I used:
+
+```c
+void setup() {
+  DDRB = 0b0111;
+}
+
+void del (int millis) {
+  for (volatile unsigned int i = 34*millis; i>0; i--);
+}
+
+void loop() {
+  for (int i = 0; i<3; i++) {
+    PORTB = 1 << i;
+    del(333);
+  }
+}
+```
+
 ---
 
 ## PCB Assembly
