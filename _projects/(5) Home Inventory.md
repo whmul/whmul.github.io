@@ -1,6 +1,6 @@
 ---
 name: Raspberry Pi Home Inventory
-tools: [Raspberry Pi, Barcode Scanner, Python]
+tools: [Raspberry Pi, Barcode Scanner, Python, Flask]
 image: https://i.postimg.cc/yx2HKZ8N/IMG-20250823-154049.jpg
 description: Keeping track of the pantry inventory with a barcode scanner and a Raspberry pi.
 ---
@@ -49,6 +49,8 @@ We keep a lot of canned goods and other products in the basement on a shelf. Unf
 - OpenFoodFacts API: If the scanned barcode is new, the code tries to fetch its product name; otherwise, you are asked for a manual name.
 - StateMachine: Remembers if you’re in ADD or REMOVE mode, and if you triggered a one-shot action (like delete).
 
+
+
 ---
 
 ![Symbol](https://i.postimg.cc/76s4Bcv0/IMG-20250823-154132.jpg)
@@ -62,7 +64,188 @@ We keep a lot of canned goods and other products in the basement on a shelf. Unf
 
 ---
 
-### Code:
+### Local Web Page
+
+- I also have a Flask app that runs as a daemon on the raspberry pi, which hosts the json file to your browser, allowing you to sort by category and name, and allows you to increment and decrement the quantity from your computer.
+
+![Local website frontend](https://i.postimg.cc/Y2FNdyp0/frontend.png)
+> Local website frontend
+
+---
+
+### Flask Code:
+
+```python
+from flask import Flask, jsonify, render_template_string, request
+import json
+import os
+import threading
+
+app = Flask(__name__)
+
+INVENTORY_FILE = 'inventory.json'
+inventory_lock = threading.Lock()
+
+HTML_PAGE = '''
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Inventory Table</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2em; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; }
+        th { background: #f2f2f2; cursor: pointer; }
+        th.sorted-asc::after { content: " ▲"; }
+        th.sorted-desc::after { content: " ▼"; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        button { padding: 0 7px; font-size: 14px; line-height: 1; }
+        button:active { background: #eee; }
+        span.qty { min-width:2em; display:inline-block; text-align:center;}
+    </style>
+</head>
+<body>
+    <h2>Inventory</h2>
+    <div id="table-container">Loading...</div>
+    <script>
+    let inventory = {};
+    let tableData = [];
+    let columns = [];
+    let sortCol = null;
+    let sortDir = 1;
+
+    function fetchInventory() {
+        fetch('/inventory.json')
+            .then(response => response.json())
+            .then(data => {
+                inventory = data;
+                tableData = Object.entries(inventory).map(([upc, details]) => {
+                    return { "UPC": upc, ...details };
+                });
+                columns = Object.keys(tableData[0] || {});
+                renderTable();
+            });
+    }
+
+    function renderTable() {
+        let html = '<table><thead><tr>';
+        columns.forEach((col, idx) => {
+            let className = (sortCol === col) ? ('sorted-' + (sortDir > 0 ? 'asc' : 'desc')) : '';
+            html += `<th class="${className}" onclick="sortTable('${col}')">${col}</th>`;
+        });
+        html += '</tr></thead><tbody>';
+        tableData.forEach(row => {
+            html += '<tr>';
+            columns.forEach(col => {
+                if (col === "Quantity") {
+                    html += `<td>
+                        <button onclick="updateQuantity('${row['UPC']}', -1)">&#8595;</button>
+                        <span id="qty-${row['UPC']}" class="qty">${row[col]}</span>
+                        <button onclick="updateQuantity('${row['UPC']}', 1)">&#8593;</button>
+                    </td>`;
+                } else {
+                    html += `<td>${row[col] !== undefined ? row[col] : ''}</td>`;
+                }
+            });
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+        document.getElementById('table-container').innerHTML = html;
+    }
+
+    function sortTable(col) {
+        if (sortCol === col) {
+            sortDir *= -1;
+        } else {
+            sortCol = col;
+            sortDir = 1;
+        }
+        tableData.sort((a, b) => {
+            let x = a[col], y = b[col];
+            if (!isNaN(parseFloat(x)) && !isNaN(parseFloat(y))) {
+                return (parseFloat(x) - parseFloat(y)) * sortDir;
+            }
+            return (String(x).localeCompare(String(y))) * sortDir;
+        });
+        renderTable();
+    }
+
+    function updateQuantity(upc, delta) {
+        fetch('/api/' + (delta > 0 ? "increment" : "decrement"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ upc: upc })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById("qty-" + upc).innerText = data.quantity;
+                // Optionally: fetchInventory();
+            } else {
+                alert("Update failed");
+            }
+        });
+    }
+
+    window.sortTable = sortTable;
+    window.updateQuantity = updateQuantity;
+    fetchInventory();
+    </script>
+</body>
+</html>
+'''
+
+@app.route('/')
+def index():
+    return render_template_string(HTML_PAGE)
+
+@app.route('/inventory.json')
+def inv():
+    with inventory_lock:
+        if not os.path.exists(INVENTORY_FILE):
+            return jsonify({})
+        with open(INVENTORY_FILE, "r", encoding="utf-8") as f:
+            inv_data = json.load(f)
+    return jsonify(inv_data)
+
+@app.route('/api/increment', methods=['POST'])
+def api_increment():
+    data = request.get_json(force=True)
+    upc = data.get('upc')
+    with inventory_lock:
+        if not os.path.exists(INVENTORY_FILE):
+            return jsonify({"success": False}), 400
+        with open(INVENTORY_FILE, "r", encoding="utf-8") as f:
+            inv_data = json.load(f)
+        if upc in inv_data:
+            inv_data[upc]['Quantity'] = int(inv_data[upc].get('Quantity', 0)) + 1
+            with open(INVENTORY_FILE, "w", encoding="utf-8") as f:
+                json.dump(inv_data, f, indent=4)
+            return jsonify({"success": True, "quantity": inv_data[upc]['Quantity']})
+    return jsonify({"success": False}), 400
+
+@app.route('/api/decrement', methods=['POST'])
+def api_decrement():
+    data = request.get_json(force=True)
+    upc = data.get('upc')
+    with inventory_lock:
+        if not os.path.exists(INVENTORY_FILE):
+            return jsonify({"success": False}), 400
+        with open(INVENTORY_FILE, "r", encoding="utf-8") as f:
+            inv_data = json.load(f)
+        if upc in inv_data:
+            inv_data[upc]['Quantity'] = max(0, int(inv_data[upc].get('Quantity', 0)) - 1)
+            with open(INVENTORY_FILE, "w", encoding="utf-8") as f:
+                json.dump(inv_data, f, indent=4)
+            return jsonify({"success": True, "quantity": inv_data[upc]['Quantity']})
+    return jsonify({"success": False}), 400
+
+if __name__ == "__main__":
+    app.run(host='192.168.1.180', port=5000, debug=True)
+```
+
+### Scanner Code:
 
 ```python
 from __future__ import annotations
@@ -78,18 +261,18 @@ from typing import Dict, Optional, Callable
 import openfoodfacts
 
 
-# Configuration
+# Config
 APP_NAME = "HomeInventory"
-APP_VERSION = "1.0"
+APP_VERSION = "2.0"
 INVENTORY_FILE = "inventory.json"
 
 # Control barcodes
-ADD_MODE_BARCODE = "400000111117" # Persistent mode: add
-REMOVE_MODE_BARCODE = "400000333335" # Persistent mode: remove
-DELETE_ITEM_BARCODE = "400000555553" # One-shot action
-ADDQTY_MODE_BARCODE = "400000222226" # One-shot action
-REMOVEQTY_MODE_BARCODE = "400000444444" # One-shot action
-PRINT_INVENTORY_BARCODE = "400000666662" # Function call
+ADD_MODE_BARCODE = "400000111117"         # Persistent mode: add
+REMOVE_MODE_BARCODE = "400000333335"      # Persistent mode: remove
+DELETE_ITEM_BARCODE = "400000555553"      # One-shot action
+ADDQTY_MODE_BARCODE = "400000222226"      # One-shot action
+REMOVEQTY_MODE_BARCODE = "400000444444"   # One-shot action
+PRINT_INVENTORY_BARCODE = "400000666662"  # Function call
 
 # Control barcode sets/maps (single source of truth)
 CONTROL_BARCODES = {
@@ -147,14 +330,28 @@ class IO:
 class Item:
     name: str
     quantity: int = 0
+    category: str = "Other"
+    display_name: Optional[str] = None
 
     def to_json(self) -> Dict:
-        return asdict(self)
+        return {
+            "Name": self.name,
+            "Display Name": self.display_name if self.display_name is not None else self.name,
+            "Quantity": self.quantity,
+            "Category": self.category,
+        }
 
     @staticmethod
     def from_json(data: Dict) -> Item:
-        return Item(name=data.get("Name", "Unknown"), quantity=int(data.get("Quantity", 0)))
-
+        name = data.get("Name", "Unknown")
+        # Use the display_name from json if present, else fallback to name
+        display_name = data.get("Display Name", name)
+        return Item(
+            name=name,
+            quantity=int(data.get("Quantity", 0)),
+            category=data.get("Category", "Other"),
+            display_name=display_name,
+        )
 
 class Mode(Enum):
     ADD = auto()
@@ -168,7 +365,7 @@ class Action(Enum):
     REMOVE_QTY = auto()
 
 
-# Inventory 
+# Inventory
 class Inventory:
     def __init__(self, filename: str, api=API, io: Optional[IO] = None):
         self.filename = filename
@@ -201,7 +398,11 @@ class Inventory:
         tmp_fd, tmp_path = tempfile.mkstemp(prefix="inv_", suffix=".json", dir=os.path.dirname(self.filename) or None)
         try:
             with os.fdopen(tmp_fd, "w", encoding="utf-8") as tmp_file:
-                payload = {bc: {"Name": item.name, "Quantity": item.quantity} for bc, item in self.data.items()}
+                #payload = {bc: {"Name": item.name, "Quantity": item.quantity, "Category": item.category} for bc, item in self.data.items()}
+                payload = {
+                    bc: item.to_json()
+                    for bc, item in self.data.items()
+                }
                 json.dump(payload, tmp_file, indent=4)
             os.replace(tmp_path, self.filename)
             logger.debug(f"Inventory saved to {self.filename}.")
@@ -222,23 +423,31 @@ class Inventory:
             logger.debug(f"OpenFoodFacts API error for {barcode}: {e}")
         return None
 
-    def resolve_product_name(self, barcode: str) -> str:
-        # Use cached name if present
+    def resolve_product_name(self, barcode: str) -> (str, str):
+        # Use cached name/category if present
         if barcode in self.data and self.data[barcode].name:
-            return self.data[barcode].name
+            return self.data[barcode].name, self.data[barcode].category
 
         # Try to fetch from API
         fetched = self.fetch_product_name(barcode)
         if fetched:
-            return fetched
+            return fetched, "Food"
 
-        # Ask user for a friendly name
+        # Ask user for a name and food prompt
         user_input = self._io.input(
             f"Unknown product for barcode {barcode}. Enter a name (default: Miscellaneous): "
         ).strip()
-        return user_input or "Miscellaneous"
+        name = user_input or "Miscellaneous"
+
+        is_food_str = self._io.input(
+            "Is this a food item? y/n (default n): "
+        ).strip().lower()
+        category = "Food" if is_food_str == "y" else "Other"
+
+        return name, category
 
     def add_item(self, barcode: str, qty: int) -> None:
+        self.load_inventory()
         if self.is_control_barcode(barcode):
             logger.info("Scanned barcode is reserved and cannot be added to inventory.")
             return
@@ -248,13 +457,15 @@ class Inventory:
             item.quantity += qty
             logger.info(f"Added {qty} to {item.name} [{barcode}]. New quantity: {item.quantity}.")
         else:
-            name = self.resolve_product_name(barcode)
-            self.data[barcode] = Item(name=name, quantity=qty)
-            logger.info(f"Added new item {name} [{barcode}] with quantity {qty}.")
+            name, category = self.resolve_product_name(barcode)
+            #self.data[barcode] = Item(name=name, quantity=qty, category=category)
+            self.data[barcode] = Item(name=name, quantity=qty, category=category, display_name=name)
+            logger.info(f"Added new item {name} [{barcode}] (Category: {category}) with quantity {qty}.")
 
         self.save_inventory()
 
     def remove_item(self, barcode: str, qty: int) -> None:
+        self.load_inventory()
         if self.is_control_barcode(barcode):
             logger.info("Scanned barcode is reserved and cannot be removed from inventory.")
             return
@@ -270,6 +481,7 @@ class Inventory:
         self.save_inventory()
 
     def delete_item(self, barcode: str) -> None:
+        self.load_inventory()
         if self.is_control_barcode(barcode):
             logger.info("Scanned barcode is reserved and cannot be deleted from inventory.")
             return
@@ -287,8 +499,10 @@ class Inventory:
             return
 
         self._io.print("\n--- Inventory ---")
-        for barcode, item in sorted(self.data.items(), key=lambda x: x[1].name.lower()):
-            self._io.print(f"{item.name:30s} qty: {item.quantity:4d}  [{barcode}]")
+        #for barcode, item in sorted(self.data.items(), key=lambda x: x[1].name.lower()):
+        #    self._io.print(f"{item.name:30s} qty: {item.quantity:4d}  [{barcode}]")
+        for barcode, item in sorted(self.data.items(), key=lambda x: (x[1].display_name or x[1].name).lower()):
+            self._io.print(f"{item.display_name or item.name:30s} qty: {item.quantity:4d}  [{barcode}]")
         self._io.print("--- End ---\n")
 
 
@@ -333,7 +547,7 @@ class StateMachine:
         logger.info("Returned to ADD mode.")
 
 
-# Main loop 
+# Main loop
 def main() -> None:
     io = IO()
     inventory = Inventory(INVENTORY_FILE, io=io)
@@ -344,7 +558,17 @@ def main() -> None:
 
     try:
         while True:
-            barcode = io.input("Scanner > ").strip()
+            # Determine prompt mode for display
+            if machine.pending_action == Action.DELETE:
+                prompt_mode = "DELETE"
+            elif machine.pending_action == Action.ADD_QTY:
+                prompt_mode = "ADDQTY"
+            elif machine.pending_action == Action.REMOVE_QTY:
+                prompt_mode = "REMOVEQTY"
+            else:
+                prompt_mode = machine.mode.name   # "ADD" or "REMOVE"
+        
+            barcode = io.input(f"Scanner - {prompt_mode} > ").strip()
             if not barcode:
                 continue
 
@@ -398,4 +622,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 ```
