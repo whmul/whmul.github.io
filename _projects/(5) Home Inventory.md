@@ -21,11 +21,9 @@ We keep a lot of canned goods and other products in the basement on a shelf. Unf
 
 > The top 4 datamatrix codes are **modes**, meaning they persist through scans. The Bottom 4 are **actions**, either they fire when you scan, or they need you to scan one item before returning to add mode.
 
-> The Add/Remove quantity modes have you scan an item, then prompt you to enter a quantity.
+> The Add/Remove quantity modes have you scan an item, then prompt you to enter a quantity. 
 
-![Photo of barcodes](https://i.postimg.cc/zvyr4j5M/IMG-20250823-154101.jpg)
-
-> I added two special barcodes for individual rolls of paper towels or toilet paper. These are handled by the quantity modes.
+> I also added two special barcodes for individual rolls of paper towels or toilet paper (since they come in different sized packs). These are handled by the quantity modes.
 
 
 
