@@ -11,6 +11,8 @@ description: Keeping track of the pantry inventory with a barcode scanner and a 
 
 We keep a lot of canned goods and other products in the basement on a shelf. Unfortunately, the inconvenience required in manually checking it when we need something leads to us not knowing what we do or don't have, most of the time. The reasonable solution would be to build an inventory tracker! This system uses a Honeywell Xenon 1902 2D Barcode Scanner and a classic Raspberry pi Model B+ I had from 2014. 
 
+![Scanner Setup in the Dark](https://i.postimg.cc/YCY5gNWw/IMG-20250926-001057.jpg)
+
 ### How to use it?
 
 1. Scan item barcodes:
