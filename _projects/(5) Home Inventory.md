@@ -1,7 +1,7 @@
 ---
 name: Raspberry Pi Home Inventory
 tools: [Raspberry Pi, Barcode Scanner, Python, Flask]
-image: https://i.postimg.cc/yx2HKZ8N/IMG-20250823-154049.jpg
+image: https://i.postimg.cc/YCY5gNWw/IMG-20250926-001057.jpg
 description: Keeping track of the pantry inventory with a barcode scanner and a Raspberry pi.
 ---
 
